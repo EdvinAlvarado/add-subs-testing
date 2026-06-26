@@ -66,8 +66,8 @@ func AddSubs(dir string, videoformat string, subformat string, lang string) ([]O
 	}
 
 	// Show user
-	sort.Sort(sort.StringSlice(videofiles))
-	sort.Sort(sort.StringSlice(subfiles))
+	sort.Strings(videofiles)
+	sort.Strings(subfiles)
 	fmt.Println("Joining sub files to these video files")
 	for i, sub := range subfiles {
 		fmt.Printf("%s\t%s", sub, videofiles[i])
