@@ -1,4 +1,6 @@
 #include <asm-generic/errno-base.h>
+#include <linux/limits.h>
+#define _DEFAULT_SOURCE
 #include <dirent.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -9,7 +11,6 @@
 #include <sys/stat.h> // mkdir
 #include <errno.h> // get libc error
 
-typedef char *string;
 
 enum ProgramError {
 	LANGUAGE_ERR = 1,
@@ -26,32 +27,32 @@ enum ProgramError {
 	THREAD_JOIN_ERR,
 };
 
-string program_error_msg(int err) {
+char* program_error_msg(int err) {
 	switch (err) {
 		case LANGUAGE_ERR:
-			return "error: language not supported.";
+			return "LANGUAGE_ERR: language not supported.";
 		case DIR_ERR:
-			return "error: that is not a directory.";
+			return "DIR_ERR: that is not a directory.";
 		case NO_FILE_ERR:
-			return "error: either there are no video files or sub files that meet the file format specified.";
+			return "NO_FILE_ERR: either there are no video files or sub files that meet the file format specified.";
 		case MISMATCH_ERR:
-			return "error: no equal ammount of video and sub files.";
+			return "MISMATCH_ERR: no equal ammount of video and sub files.";
 		case RESPONSE_ERR:
-			return "error: response was too long?";
+			return "RESPONSE_ERR: response was too long?";
 		case USER_CANCEL:
 			return "user cancelled execution.";
 		case OUTPUT_MKDIR_ERR:
-			return "error: mkdir error out unexepectedly. Check permissios on the directory.";
+			return "OUTPUT_MKDIR_ERR: mkdir error out unexepectedly. Check permissios on the directory.";
 		case SNPRINTF_ERR:
-			return "error: encoding failed or command line string too long.";
+			return "SNPRINTF_ERR: encoding failed or command line string too long.";
 		case SPRINTF_ERR:
-			return "error: sprintf encoding failed";
+			return "SPRINTF_ERR: sprintf encoding failed";
 		case ARG_COUNT_ERR:
-			return "error: wrong amount of arguments.";
+			return "ARG_COUNT_ERR: wrong amount of arguments.";
 		case THREAD_CREATE_ERR:
-			return "error: thread create failed.";
+			return "THREAD_CREATE_ERR: thread create failed.";
 		case THREAD_JOIN_ERR:
-			return "error: pthread join failed.";
+			return "THREAD_JOIN_ERR: pthread join failed.";
 		default:
 			return "undefined error";
 	}
@@ -62,36 +63,12 @@ int program_error_puts_return(int err) {
 	return err;
 }
 
-typedef struct	{
-	string *ptr;
-	size_t len;
-	size_t size;
-} StrVec;
 
-void append_strvec(StrVec *v, const string s) {
-	v->len += 1;
-	if (v->len > v->size) {
-		v->size *= 2;
-		v->ptr = realloc(v->ptr, v->size * sizeof(string));
-	}
-	v->ptr[v->len - 1] = strdup(s);
-}
+typedef char* string;
 
-StrVec new_strvec(const size_t size) {
-	StrVec ret;
-	ret.size = size;
-	ret.len = 0;
-	ret.ptr = calloc(size, sizeof(string)); // check if need to calloc internals;
-	return ret;
-}
+#define MAX_PATH 4096
 
-void free_strvec(StrVec* v) {
-	for (int i = 0; i <= v->len; i++) {
-		free(v->ptr[i]);
-	}
-	v->len = v->size = 0;
-	v->ptr = NULL;
-}
+
 
 string langs(const string lang) {
 	if (strcmp(lang, "jpn") == 0) {
@@ -106,19 +83,40 @@ int compare_str(const void *a, const void *b) {
 }
 
 void* run_cmd(void* input) {
-	int ret = system((string)input);
+	//int ret = system((string)input);
 	return NULL;
+}
+
+
+
+typedef struct {
+	char arr[1000][PATH_MAX];
+	size_t len;
+} array;
+
+array init_arr() {
+	array ret = {
+		.len = 0,
+	};
+	return ret;
+}
+
+
+void append_str(array* a, const char* input) {
+	strcpy(a->arr[a->len], input);
+	a->len += 1;
 }
 
 // TODO testing
 int addsubs(const string dir, const string videoformat, const string subformat, const string lang) {
+	
 	string language = langs(lang);
 	if (language == NULL) {
 		return program_error_puts_return(LANGUAGE_ERR);
 	}
 
-	StrVec videofiles = new_strvec(12);
-	StrVec subfiles = new_strvec(12);
+	array videofiles = init_arr();
+	array subfiles = init_arr();
 
 	DIR *folder = opendir(dir);
 	if (folder == NULL) {
@@ -129,9 +127,9 @@ int addsubs(const string dir, const string videoformat, const string subformat, 
 	while ((entry = readdir(folder))) {
 		if (entry->d_type == DT_REG) {
 			if (strstr(entry->d_name, videoformat) != NULL) {
-				append_strvec(&videofiles, entry->d_name);
+				append_str(&videofiles, entry->d_name);
 			} else if (strstr(entry->d_name, subformat) != NULL) {
-				append_strvec(&subfiles, entry->d_name);
+				append_str(&videofiles, entry->d_name);
 			}
 		}
 	}
@@ -144,8 +142,8 @@ int addsubs(const string dir, const string videoformat, const string subformat, 
 		return program_error_puts_return(MISMATCH_ERR);
 	}
 
-	qsort(videofiles.ptr, videofiles.len, sizeof(string), compare_str);
-	qsort(subfiles.ptr, subfiles.len, sizeof(string), compare_str);
+	qsort(videofiles.arr, videofiles.len, PATH_MAX, compare_str);
+	qsort(subfiles.arr, subfiles.len, PATH_MAX, compare_str);
 
 	puts("Are these pairs correct? (Y/n):");
 	char response[10];
@@ -157,10 +155,10 @@ int addsubs(const string dir, const string videoformat, const string subformat, 
 	}
 
 	const string os = "/output";
-	string output_dir = malloc(strlen(dir) + strlen(os) +  1);
+	char output_dir[MAX_PATH];
 	strcpy(output_dir, dir);
 	strcat(output_dir, os);
-	int ret = mkdir(output_dir, 0777);
+	int ret = mkdir(output_dir, 0770);
 	if (ret != 0 && errno != EEXIST) {
 		return program_error_puts_return(OUTPUT_MKDIR_ERR);
 	}
@@ -168,12 +166,11 @@ int addsubs(const string dir, const string videoformat, const string subformat, 
 	// TODO test loop and join
 	pthread_t thread_id;
 	for (int i = 0; i < subfiles.len; i++) {
-		string sub = subfiles.ptr[i];
-		string vid = videofiles.ptr[i];
+		//string sub = subfiles.ptr[i];
+		string vid = videofiles.arr[i];
 
 		const string mkvmerge_cmd_str = "mkvmerge -o %s/%s %s --language 0:%s --track-name 0:%s";
-		const int mkvmerge_cmd_strlen = 1 + strlen(mkvmerge_cmd_str) + strlen(output_dir) + 2*strlen(vid) + strlen(lang) + strlen(language);
-		string cmd = malloc(mkvmerge_cmd_strlen);
+		string cmd = malloc(MAX_PATH*3 + strlen(mkvmerge_cmd_str)  + strlen(lang) + strlen(language) + 3);
 		int ret = sprintf(cmd, mkvmerge_cmd_str, output_dir, vid, vid, lang, language);
 		if (ret < 0) {
 			return program_error_puts_return(SPRINTF_ERR);
@@ -183,7 +180,7 @@ int addsubs(const string dir, const string videoformat, const string subformat, 
 		if (ret != 0) {
 			return program_error_puts_return(THREAD_CREATE_ERR);
 		}
-		
+		free(cmd);	
 	}
 	ret = pthread_join(thread_id,NULL);
 	if (ret != 0) {

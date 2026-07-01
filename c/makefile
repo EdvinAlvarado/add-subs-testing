@@ -1,7 +1,17 @@
 
+CFLAGS = -std=c23 -Wall -Werror -O2
+DEBUG_FLAGS = -fsanitize=address -g
+RELEASE_FLAGS = -s
 
 build:
-	gcc addsubs.c -o addsubs
+	clang $(CFLAG) $(DEBUG_FLAGS) addsubs.c -o addsubs
+	
+release: build
+	clang $(CFLAGS) $(RELEASE_FLAGS) addsubs.c -o addsubs
+	strip addsubs
+
+expand:
+	gcc -E addsubs.c > addsubs_expanded.c
 
 test_no_args: build
 	./addsubs
